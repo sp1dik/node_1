@@ -1,8 +1,9 @@
-const fs = require('fs');
+const fs = require('fs').promises;
+const path = require('path');
 const Student = require('./Student');
 
 class FileStorage {
-  static saveToJSON(data, filePath) {
+  static async saveToJSON(data, filePath) {
     try {
       const jsonData = data.map(student => ({
         id: student.id,
@@ -12,19 +13,21 @@ class FileStorage {
       }));
       
       const jsonString = JSON.stringify(jsonData, null, 2);
-      fs.writeFileSync(filePath, jsonString, 'utf8');
+      await fs.writeFile(filePath, jsonString, 'utf8');
     } catch (error) {
       throw new Error(`Failed to save students to JSON file: ${error.message}`);
     }
   }
 
-  static loadJSON(filePath) {
+  static async loadJSON(filePath) {
     try {
-      if (!fs.existsSync(filePath)) {
+      try {
+        await fs.access(filePath);
+      } catch {
         throw new Error(`File not found: ${filePath}`);
       }
 
-      const jsonString = fs.readFileSync(filePath, 'utf8');
+      const jsonString = await fs.readFile(filePath, 'utf8');
       const data = JSON.parse(jsonString);
 
       if (!Array.isArray(data)) {
@@ -36,6 +39,14 @@ class FileStorage {
       );
     } catch (error) {
       throw new Error(`Failed to load students from JSON file: ${error.message}`);
+    }
+  }
+
+  static async ensureDirectoryExists(dirPath) {
+    try {
+      await fs.mkdir(dirPath, { recursive: true });
+    } catch (error) {
+      throw new Error(`Failed to create directory: ${error.message}`);
     }
   }
 }
