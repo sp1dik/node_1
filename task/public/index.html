@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Система управления студентами</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>� Система управления студентами</h1>
+    
+    <!-- Добавление студента -->
+    <section>
+      <h2>Добавить студента</h2>
+      <form id="addStudentForm">
+        <input type="text" id="studentName" placeholder="Имя" required>
+        <input type="number" id="studentAge" placeholder="Возраст" required>
+        <input type="number" id="studentGroup" placeholder="Группа" required>
+        <button type="submit">Добавить</button>
+      </form>
+    </section>
+
+    <!-- Статистика -->
+    <section>
+      <h2>Статистика</h2>
+      <p>Всего студентов: <strong id="totalStudents">0</strong></p>
+      <p>Средний возраст: <strong id="averageAge">0</strong></p>
+      <p>Статус резервной копии: <strong id="backupStatus">Остановлена</strong></p>
+    </section>
+
+    <!-- Список студентов -->
+    <section>
+      <h2>Список студентов</h2>
+      <div class="button-group">
+        <button id="refreshBtn">Обновить</button>
+        <button id="saveBtn">Сохранить в JSON</button>
+        <button id="loadBtn">Загрузить из JSON</button>
+      </div>
+      <table id="studentsTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Имя</th>
+            <th>Возраст</th>
+            <th>Группа</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody id="studentsTableBody">
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Фильтр по группе -->
+    <section>
+      <h2>Фильтр по группе</h2>
+      <input type="number" id="groupFilter" placeholder="Номер группы" min="1">
+      <button id="filterBtn">Фильтровать</button>
+      <table id="groupTable" style="display: none;">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Имя</th>
+            <th>Возраст</th>
+            <th>Группа</th>
+          </tr>
+        </thead>
+        <tbody id="groupTableBody">
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Резервная копия -->
+    <section>
+      <h2>Управление резервной копией</h2>
+      <button id="startBackupBtn">Начать</button>
+      <button id="stopBackupBtn" disabled>Остановить</button>
+      <button id="statusBackupBtn">Статус</button>
+      <div id="message"></div>
+    </section>
+
+    <!-- Модальное окно редактирования -->
+    <div id="editModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Редактировать студента</h2>
+        <form id="editForm">
+          <input type="hidden" id="editStudentId">
+          <input type="text" id="editName" placeholder="Имя" required>
+          <input type="number" id="editAge" placeholder="Возраст" required>
+          <input type="number" id="editGroup" placeholder="Группа" required>
+          <button type="submit">Сохранить</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
