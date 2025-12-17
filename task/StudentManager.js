@@ -1,57 +1,79 @@
 const { EventEmitter } = require('events');
 const Student = require('./Student');
+const db = require('./db');
 
 class StudentManager extends EventEmitter {
   constructor() {
     super();
-    this.students = [
-      new Student("1", "John Doe", 20, 2),
-      new Student("2", "Jane Smith", 23, 3),
-      new Student("3", "Mike Johnson", 18, 2),
-    ];
   }
 
-  addStudent(name, age, group) {
-    const id = (this.students.length + 1).toString();
-    const newStudent = new Student(id, name, age, group);
-    this.students.push(newStudent);
-    this.emit('student:added', newStudent);
-    return newStudent;
+  async addStudent(name, age, group) {
+    const id = Date.now().toString();
+    const sql = `INSERT INTO students (id, name, age, group_num) VALUES ($1, $2, $3, $4) RETURNING *`;
+    const values = [id, name, age, group];
+    const res = await db.query(sql, values);
+    const row = res.rows[0];
+    const student = new Student(row.id, row.name, row.age, row.group_num);
+    this.emit('student:added', student);
+    return student;
   }
 
-  removeStudent(id) {
-    const initialLength = this.students.length;
-    this.students = this.students.filter(student => student.id !== id);
-    const removed = this.students.length < initialLength;
-    if (removed) {
-      this.emit('student:removed', { id });
-    }
+  async removeStudent(id) {
+    const res = await db.query(`DELETE FROM students WHERE id = $1`, [id]);
+    const removed = res.rowCount > 0;
+    if (removed) this.emit('student:removed', { id });
     return removed;
   }
 
-  getStudentById(id) {
-    const student = this.students.find(student => student.id === id) || null;
+  async getStudentById(id) {
+    const res = await db.query(`SELECT * FROM students WHERE id = $1 LIMIT 1`, [id]);
+    const row = res.rows[0] || null;
+    const student = row ? new Student(row.id, row.name, row.age, row.group_num) : null;
     this.emit('student:retrieved', { id, found: !!student });
     return student;
   }
 
-  getStudentsByGroup(group) {
-    const students = this.students.filter(student => student.group === group);
+  async getStudentsByGroup(group) {
+    const res = await db.query(`SELECT * FROM students WHERE group_num = $1 ORDER BY id`, [group]);
+    const students = res.rows.map(r => new Student(r.id, r.name, r.age, r.group_num));
     this.emit('students:retrieved-by-group', { group, count: students.length });
     return students;
   }
 
-  getAllStudents() {
-    this.emit('students:retrieved-all', { count: this.students.length });
-    return this.students;
+  async getAllStudents() {
+    const res = await db.query(`SELECT * FROM students ORDER BY id`);
+    const students = res.rows.map(r => new Student(r.id, r.name, r.age, r.group_num));
+    this.emit('students:retrieved-all', { count: students.length });
+    return students;
   }
 
-  calculateAverageAge() {
-    if (this.students.length === 0) return 0;
-    const totalAge = this.students.reduce((sum, student) => sum + student.age, 0);
-    const average = totalAge / this.students.length;
-    this.emit('average-age:calculated', { average });
-    return average;
+  async calculateAverageAge() {
+    const res = await db.query(`SELECT AVG(age) AS avg_age FROM students`);
+    const avg = parseFloat(res.rows[0].avg_age) || 0;
+    this.emit('average-age:calculated', { average: avg });
+    return avg;
+  }
+
+  async replaceAllStudents(students) {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM students');
+      for (const s of students) {
+        await client.query(
+          `INSERT INTO students (id, name, age, group_num) VALUES ($1, $2, $3, $4)`,
+          [s.id, s.name, s.age, s.group]
+        );
+      }
+      await client.query('COMMIT');
+      const all = await this.getAllStudents();
+      return all;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 }
 

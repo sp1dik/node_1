@@ -1,9 +1,11 @@
 const express = require('express');
 const path = require('path');
+const { body, param, validationResult } = require('express-validator');
 const StudentManager = require('./StudentManager');
 const FileStorage = require('./FileStorage');
 const DataBackup = require('./DataBackup');
 const Logger = require('./Logger');
+const db = require('./db');
 
 const app = express();
 const PORT = 3000;
@@ -11,6 +13,14 @@ const PORT = 3000;
 // Middleware
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+function handleValidationErrors(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  next();
+}
 
 // Initialize components
 const verbose = process.argv.includes('--verbose');
@@ -42,7 +52,7 @@ studentManager.on('students:retrieved-all', (data) => {
 });
 
 studentManager.on('average-age:calculated', (data) => {
-  logger.log(` Event: Average age calculated - ${data.average.toFixed(2)}`);
+  try { logger.log(` Event: Average age calculated - ${data.average.toFixed(2)}`); } catch(e) {}
 });
 
 // Event listeners for DataBackup
@@ -76,208 +86,123 @@ app.get('/', (req, res) => {
 // ============= STUDENT ENDPOINTS =============
 
 // GET /api/students - Get all students
-app.get('/api/students', (req, res) => {
+app.get('/api/students', async (req, res) => {
   try {
-    const students = studentManager.getAllStudents();
-    res.status(200).json({
-      success: true,
-      data: students,
-      count: students.length
-    });
+    const students = await studentManager.getAllStudents();
+    res.status(200).json({ success: true, data: students, count: students.length });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// POST /api/students - Add new student
-app.post('/api/students', (req, res) => {
-  try {
-    const { name, age, group } = req.body;
-
-    if (!name || age === undefined || group === undefined) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields: name, age, group'
-      });
+// POST /api/students - Add new student 
+app.post('/api/students',
+  body('name').isString().isLength({ min: 1 }),
+  body('age').isInt({ min: 0 }),
+  body('group').isInt({ min: 0 }),
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const { name, age, group } = req.body;
+      const newStudent = await studentManager.addStudent(name, age, group);
+      res.status(201).json({ success: true, message: 'Student added successfully', data: newStudent });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
     }
-
-    if (typeof age !== 'number' || typeof group !== 'number') {
-      return res.status(400).json({
-        success: false,
-        error: 'Age and group must be numbers'
-      });
-    }
-
-    const newStudent = studentManager.addStudent(name, age, group);
-    res.status(201).json({
-      success: true,
-      message: 'Student added successfully',
-      data: newStudent
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
   }
-});
+);
 
 // PUT /api/students - Replace all students
-app.put('/api/students', (req, res) => {
-  try {
-    const { students } = req.body;
-
-    if (!Array.isArray(students)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Students must be an array'
-      });
+app.put('/api/students',
+  body('students').isArray(),
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const { students } = req.body;
+      const replaced = await studentManager.replaceAllStudents(students);
+      res.status(200).json({ success: true, message: 'All students replaced successfully', data: replaced });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
     }
-
-    const Student = require('./Student');
-    studentManager.students = students.map(s => 
-      new Student(s.id, s.name, s.age, s.group)
-    );
-
-    res.status(200).json({
-      success: true,
-      message: 'All students replaced successfully',
-      data: studentManager.getAllStudents()
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
   }
-});
+);
 
 // GET /api/students/:id - Get student by ID
-app.get('/api/students/:id', (req, res) => {
+app.get('/api/students/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const student = studentManager.getStudentById(id);
-
-    if (!student) {
-      return res.status(404).json({
-        success: false,
-        error: 'Student not found'
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: student
-    });
+    const student = await studentManager.getStudentById(id);
+    if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
+    res.status(200).json({ success: true, data: student });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // PATCH /api/students/:id - Update student by ID
-app.patch('/api/students/:id', (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, age, group } = req.body;
+app.patch('/api/students/:id',
+  param('id').isString(),
+  body('name').optional().isString(),
+  body('age').optional().isInt({ min: 0 }),
+  body('group').optional().isInt({ min: 0 }),
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, age, group } = req.body;
+      const student = await studentManager.getStudentById(id);
+      if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
 
-    const student = studentManager.getStudentById(id);
-    if (!student) {
-      return res.status(404).json({
-        success: false,
-        error: 'Student not found'
-      });
+      const updated = {
+        name: name !== undefined ? name : student.name,
+        age: age !== undefined ? age : student.age,
+        group: group !== undefined ? group : student.group
+      };
+
+      const sql = `UPDATE students SET name = $1, age = $2, group_num = $3 WHERE id = $4 RETURNING *`;
+      const values = [updated.name, updated.age, updated.group, id];
+      await db.query(sql, values);
+
+      const newStudent = await studentManager.getStudentById(id);
+      res.status(200).json({ success: true, message: 'Student updated successfully', data: newStudent });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
     }
-
-    if (name) student.name = name;
-    if (age !== undefined) student.age = age;
-    if (group !== undefined) student.group = group;
-
-    res.status(200).json({
-      success: true,
-      message: 'Student updated successfully',
-      data: student
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
   }
-});
+);
 
 // DELETE /api/students/:id - Remove student by ID
-app.delete('/api/students/:id', (req, res) => {
+app.delete('/api/students/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const removed = studentManager.removeStudent(id);
-
-    if (!removed) {
-      return res.status(404).json({
-        success: false,
-        error: 'Student not found'
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Student removed successfully'
-    });
+    const removed = await studentManager.removeStudent(id);
+    if (!removed) return res.status(404).json({ success: false, error: 'Student not found' });
+    res.status(200).json({ success: true, message: 'Student removed successfully' });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // GET /api/students/group/:groupId - Get students by group
-app.get('/api/students/group/:groupId', (req, res) => {
+app.get('/api/students/group/:groupId', async (req, res) => {
   try {
     const { groupId } = req.params;
     const groupNumber = parseInt(groupId);
-
-    if (isNaN(groupNumber)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Group ID must be a number'
-      });
-    }
-
-    const students = studentManager.getStudentsByGroup(groupNumber);
-    res.status(200).json({
-      success: true,
-      data: students,
-      count: students.length
-    });
+    if (isNaN(groupNumber)) return res.status(400).json({ success: false, error: 'Group ID must be a number' });
+    const students = await studentManager.getStudentsByGroup(groupNumber);
+    res.status(200).json({ success: true, data: students, count: students.length });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // GET /api/average-age - Calculate average age
-app.get('/api/average-age', (req, res) => {
+app.get('/api/average-age', async (req, res) => {
   try {
-    const average = studentManager.calculateAverageAge();
-    res.status(200).json({
-      success: true,
-      data: {
-        average: parseFloat(average.toFixed(2))
-      }
-    });
+    const average = await studentManager.calculateAverageAge();
+    res.status(200).json({ success: true, data: { average: parseFloat(average.toFixed(2)) } });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -285,19 +210,11 @@ app.get('/api/average-age', (req, res) => {
 app.post('/api/students/save', async (req, res) => {
   try {
     const jsonFilePath = path.join(__dirname, 'students.json');
-    const students = studentManager.getAllStudents();
+    const students = await studentManager.getAllStudents();
     await FileStorage.saveToJSON(students, jsonFilePath);
-
-    res.status(200).json({
-      success: true,
-      message: 'Students saved to JSON file successfully',
-      filePath: jsonFilePath
-    });
+    res.status(200).json({ success: true, message: 'Students saved to JSON file successfully', filePath: jsonFilePath });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -305,27 +222,12 @@ app.post('/api/students/save', async (req, res) => {
 app.post('/api/students/load', async (req, res) => {
   try {
     const jsonFilePath = path.join(__dirname, 'students.json');
-    const Student = require('./Student');
     const loadedData = await FileStorage.loadJSON(jsonFilePath);
-    
-    // Преобразуем загруженные данные в экземпляры Student
-    const loadedStudents = loadedData.map(s => 
-      new Student(s.id, s.name, s.age, s.group)
-    );
-    
-    studentManager.students = loadedStudents;
-
-    res.status(200).json({
-      success: true,
-      message: 'Students loaded from JSON file successfully',
-      data: loadedStudents,
-      count: loadedStudents.length
-    });
+    await studentManager.replaceAllStudents(loadedData.map(s => ({ id: s.id, name: s.name, age: s.age, group: s.group })));
+    const loadedStudents = await studentManager.getAllStudents();
+    res.status(200).json({ success: true, message: 'Students loaded from JSON file successfully', data: loadedStudents, count: loadedStudents.length });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -335,70 +237,31 @@ app.post('/api/students/load', async (req, res) => {
 app.post('/api/backup/start', async (req, res) => {
   try {
     const { intervalMs = 5000 } = req.body;
-
-    if (dataBackup.isRunning()) {
-      return res.status(400).json({
-        success: false,
-        error: 'Backup is already running'
-      });
-    }
-
-    await dataBackup.startBackup(
-      () => studentManager.getAllStudents(),
-      intervalMs
-    );
-
-    res.status(200).json({
-      success: true,
-      message: 'Backup started successfully',
-      intervalMs
-    });
+    if (dataBackup.isRunning()) return res.status(400).json({ success: false, error: 'Backup is already running' });
+    await dataBackup.startBackup(() => studentManager.getAllStudents(), intervalMs);
+    res.status(200).json({ success: true, message: 'Backup started successfully', intervalMs });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // POST /api/backup/stop - Stop backup
 app.post('/api/backup/stop', (req, res) => {
   try {
-    if (!dataBackup.isRunning()) {
-      return res.status(400).json({
-        success: false,
-        error: 'Backup is not running'
-      });
-    }
-
+    if (!dataBackup.isRunning()) return res.status(400).json({ success: false, error: 'Backup is not running' });
     dataBackup.stopBackup();
-    res.status(200).json({
-      success: true,
-      message: 'Backup stopped successfully'
-    });
+    res.status(200).json({ success: true, message: 'Backup stopped successfully' });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // GET /api/backup/status - Get backup status
 app.get('/api/backup/status', (req, res) => {
   try {
-    res.status(200).json({
-      success: true,
-      data: {
-        isRunning: dataBackup.isRunning(),
-        status: dataBackup.isRunning() ? 'running' : 'stopped'
-      }
-    });
+    res.status(200).json({ success: true, data: { isRunning: dataBackup.isRunning(), status: dataBackup.isRunning() ? 'running' : 'stopped' } });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -424,7 +287,7 @@ app.use((err, req, res, next) => {
 // ============= START SERVER =============
 
 app.listen(PORT, () => {
-  logger.log(`\n🚀 HTTP Server started on http://localhost:${PORT}\n`);
+  logger.log(`\n HTTP Server started on http://localhost:${PORT}\n`);
   logger.log('Available endpoints:');
   logger.log('  GET  /api/students');
   logger.log('  POST /api/students');

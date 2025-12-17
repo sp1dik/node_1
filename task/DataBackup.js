@@ -40,7 +40,7 @@ class DataBackup extends EventEmitter {
         this.pendingIntervalCount = 0;
 
         try {
-          const data = dataGetter();
+          const data = await dataGetter();
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
           const backupFilePath = path.join(
             this.backupDirPath,

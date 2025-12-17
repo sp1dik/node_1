@@ -35,7 +35,7 @@ studentManager.on('students:retrieved-all', (data) => {
 });
 
 studentManager.on('average-age:calculated', (data) => {
-  logger.log(` Event: Average age calculated - ${data.average.toFixed(2)}`);
+  try { logger.log(` Event: Average age calculated - ${data.average.toFixed(2)}`); } catch (e) {}
 });
 
 dataBackup.on('backup:started', (data) => {
@@ -63,24 +63,24 @@ async function main() {
     logger.log('=== Student Management System with Async Operations ===\n');
 
     logger.log('Initial students:');
-    logger.log(studentManager.getAllStudents());
+    logger.log(await studentManager.getAllStudents());
 
     logger.log('\nAdding new student: Cristiano Messi, age 25, group 2');
-    const newStudent = studentManager.addStudent('Cristiano Messi', 25, 2);
+    const newStudent = await studentManager.addStudent('Cristiano Messi', 25, 2);
     logger.log('Student added:', newStudent);
 
     logger.log('\nGetting student by ID "1":');
-    logger.log(studentManager.getStudentById('1'));
+    logger.log(await studentManager.getStudentById('1'));
 
     logger.log('\nGetting all students in group 2:');
-    logger.log(studentManager.getStudentsByGroup(2));
+    logger.log(await studentManager.getStudentsByGroup(2));
 
     logger.log('\nAverage age of all students:');
-    logger.log(studentManager.calculateAverageAge().toFixed(2));
+    logger.log((await studentManager.calculateAverageAge()).toFixed(2));
 
     const jsonFilePath = path.join(__dirname, 'students.json');
     logger.log(`\nSaving students to ${jsonFilePath}`);
-    await FileStorage.saveToJSON(studentManager.getAllStudents(), jsonFilePath);
+    await FileStorage.saveToJSON(await studentManager.getAllStudents(), jsonFilePath);
     logger.log('Students saved successfully');
 
     logger.log('\nLoading students from JSON file');
@@ -93,10 +93,10 @@ async function main() {
     }
 
     logger.log('\nRemoving student with ID "2"');
-    const removed = studentManager.removeStudent('2');
+    const removed = await studentManager.removeStudent('2');
     logger.log(`Student removed: ${removed}`);
     logger.log('Remaining students:');
-    logger.log(studentManager.getAllStudents());
+    logger.log(await studentManager.getAllStudents());
 
     logger.log('\n=== Starting Data Backup System ===\n');
     await dataBackup.startBackup(
