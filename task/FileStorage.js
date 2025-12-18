@@ -27,7 +27,15 @@ class FileStorage {
         throw new Error(`File not found: ${filePath}`);
       }
 
-      const jsonString = await fs.readFile(filePath, 'utf8');
+      let jsonString = await fs.readFile(filePath, 'utf8');
+
+      jsonString = jsonString.replace(/\/\*[\s\S]*?\*\//g, '');
+      jsonString = jsonString
+        .split('\n')
+        .map(line => line.replace(/\/\/.*$/, ''))
+        .join('\n')
+        .trim();
+
       const data = JSON.parse(jsonString);
 
       if (!Array.isArray(data)) {
@@ -35,7 +43,7 @@ class FileStorage {
       }
 
       return data.map(item => 
-        new Student(item.id, item.name, item.age, item.group)
+        new Student(item.id, item.name, item.age, item.group !== undefined ? item.group : item.group_num)
       );
     } catch (error) {
       throw new Error(`Failed to load students from JSON file: ${error.message}`);
