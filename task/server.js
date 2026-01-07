@@ -6,6 +6,8 @@ const FileStorage = require('./FileStorage');
 const DataBackup = require('./DataBackup');
 const Logger = require('./Logger');
 const db = require('./db');
+const { v4: uuidv4 } = require('uuid');
+const { hashPassword, comparePassword, generateToken, authenticateJWT, authorizeRoles } = require('./auth');
 
 const app = express();
 const PORT = 3000;
@@ -82,6 +84,83 @@ dataBackup.on('backup:error', (data) => {
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+// === AUTH ROUTES (public) ===
+// POST /api/auth/register
+app.post('/api/auth/register',
+  body('name').isString().isLength({ min: 1 }),
+  body('email').isEmail(),
+  body('password').isLength({ min: 6 }),
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const { name, surname = '', email, password, role = 'student' } = req.body;
+
+      const existing = await db.query('SELECT id FROM users WHERE email = $1 LIMIT 1', [email]);
+      if (existing.rowCount > 0) {
+        return res.status(400).json({ success: false, error: 'Email already exists' });
+      }
+
+      // ensure role exists
+      let roleRow = await db.query('SELECT id FROM roles WHERE name = $1 LIMIT 1', [role]);
+      let roleId;
+      if (roleRow.rowCount === 0) {
+        roleId = uuidv4();
+        await db.query('INSERT INTO roles (id, name) VALUES ($1, $2)', [roleId, role]);
+      } else {
+        roleId = roleRow.rows[0].id;
+      }
+
+      const userId = uuidv4();
+      const passHash = await hashPassword(password);
+
+      await db.query(
+        'INSERT INTO users (id, name, surname, email, password, role_id) VALUES ($1,$2,$3,$4,$5,$6)',
+        [userId, name, surname, email, passHash, roleId]
+      );
+
+      const token = generateToken({ id: userId, name, email, role });
+
+      res.status(201).json({ success: true, message: 'User registered', token, data: { id: userId, name, email, role } });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+// POST /api/auth/login
+app.post('/api/auth/login',
+  body('email').isEmail(),
+  body('password').isLength({ min: 1 }),
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      const userRes = await db.query(
+        `SELECT users.id, users.name, users.surname, users.email, users.password, roles.name AS role
+         FROM users
+         LEFT JOIN roles ON users.role_id = roles.id
+         WHERE users.email = $1 LIMIT 1`,
+        [email]
+      );
+      if (userRes.rowCount === 0) {
+        return res.status(400).json({ success: false, error: 'Invalid credentials' });
+      }
+      const user = userRes.rows[0];
+      const match = await comparePassword(password, user.password);
+      if (!match) return res.status(400).json({ success: false, error: 'Invalid credentials' });
+
+      const token = generateToken({ id: user.id, name: user.name, surname: user.surname, email: user.email, role: user.role || 'student' });
+
+      res.status(200).json({ success: true, message: 'Logged in', token, data: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+// Protect API routes after auth routes
+app.use('/api', authenticateJWT);
 
 // ============= STUDENT ENDPOINTS =============
 
