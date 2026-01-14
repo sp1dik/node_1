@@ -1,5 +1,5 @@
 const StudentManager = require('./StudentManager');
-const Logger = require('./Logger');
+const createWinstonLogger = require('./winstonLogger');
 const FileStorage = require('./FileStorage');
 const DataBackup = require('./DataBackup');
 const BackupReporter = require('./BackupReporter');
@@ -8,7 +8,7 @@ const path = require('path');
 const verbose = process.argv.includes('--verbose');
 const quiet = process.argv.includes('--quiet');
 
-const logger = new Logger(verbose, quiet);
+const logger = createWinstonLogger(verbose, quiet);
 const studentManager = new StudentManager();
 const backupDirPath = path.join(__dirname, 'backups');
 const dataBackup = new DataBackup(backupDirPath);

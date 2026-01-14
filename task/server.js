@@ -4,7 +4,10 @@ const { body, param, validationResult } = require('express-validator');
 const StudentManager = require('./StudentManager');
 const FileStorage = require('./FileStorage');
 const DataBackup = require('./DataBackup');
-const Logger = require('./Logger');
+const createWinstonLogger = require('./winstonLogger');
+const swaggerUi = require('swagger-ui-express');
+const swaggerDocument = require('./swagger.json');
+const statusMonitor = require('express-status-monitor');
 const db = require('./db');
 const { v4: uuidv4 } = require('uuid');
 const { hashPassword, comparePassword, generateToken, authenticateJWT, authorizeRoles } = require('./auth');
@@ -15,6 +18,10 @@ const PORT = 3000;
 // Middleware
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// monitoring and swagger
+app.use(statusMonitor());
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 function handleValidationErrors(req, res, next) {
   const errors = validationResult(req);
@@ -27,7 +34,7 @@ function handleValidationErrors(req, res, next) {
 // Initialize components
 const verbose = process.argv.includes('--verbose');
 const quiet = process.argv.includes('--quiet');
-const logger = new Logger(verbose, quiet);
+const logger = createWinstonLogger(verbose, quiet);
 const studentManager = new StudentManager();
 const backupDirPath = path.join(__dirname, 'backups');
 const dataBackup = new DataBackup(backupDirPath);
