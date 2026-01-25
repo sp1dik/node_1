@@ -1,5 +1,3 @@
-const test = require('node:test');
-const assert = require('node:assert');
 const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
@@ -17,7 +15,7 @@ test('BackupReporter.generateReport computes counts', async () => {
 
   const reporter = new BackupReporter();
   const report = await reporter.generateReport(tmpDir);
-  assert.strictEqual(report.backupFileCount, 2);
-  assert.strictEqual(report.totalStudentsAcrossAll, 3);
+  expect(report.backupFileCount).toBe(2);
+  expect(report.totalStudentsAcrossAll).toBe(3);
   await fs.rm(tmpDir, { recursive: true, force: true });
 });

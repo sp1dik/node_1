@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const compression = require('compression');
 const { body, param, validationResult } = require('express-validator');
 const StudentManager = require('./StudentManager');
 const FileStorage = require('./FileStorage');
@@ -19,9 +20,17 @@ const PORT = 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// monitoring and swagger
-app.use(statusMonitor());
+// Compression enabled
+app.use(compression());
+
+// monitoring and swagger. create monitor instance and mount middleware
+const monitor = statusMonitor();
+// protect the monitor route by registering auth middlewares for '/status' path
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// Protect monitor page: ensure authentication and role check runs before monitor middleware
+app.use('/status', authenticateJWT, authorizeRoles('admin', 'moderator'));
+app.use(monitor.middleware);
 
 function handleValidationErrors(req, res, next) {
   const errors = validationResult(req);
@@ -372,20 +381,33 @@ app.use((err, req, res, next) => {
 
 // ============= START SERVER =============
 
-app.listen(PORT, () => {
-  logger.log(`\n HTTP Server started on http://localhost:${PORT}\n`);
-  logger.log('Available endpoints:');
-  logger.log('  GET  /api/students');
-  logger.log('  POST /api/students');
-  logger.log('  PUT  /api/students');
-  logger.log('  GET  /api/students/:id');
-  logger.log('  PATCH /api/students/:id');
-  logger.log('  DELETE /api/students/:id');
-  logger.log('  GET  /api/students/group/:groupId');
-  logger.log('  GET  /api/average-age');
-  logger.log('  POST /api/students/save');
-  logger.log('  POST /api/students/load');
-  logger.log('  POST /api/backup/start');
-  logger.log('  POST /api/backup/stop');
-  logger.log('  GET  /api/backup/status\n');
-});
+// mount protected monitor page only for admin/moderator
+app.get('/status',
+  authenticateJWT,
+  authorizeRoles('admin', 'moderator'),
+  monitor.pageRoute
+);
+
+// Export app for testing. Start server only when run directly.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    logger.log(`\n HTTP Server started on http://localhost:${PORT}\n`);
+    logger.log('Available endpoints:');
+    logger.log('  GET  /api/students');
+    logger.log('  POST /api/students');
+    logger.log('  PUT  /api/students');
+    logger.log('  GET  /api/students/:id');
+    logger.log('  PATCH /api/students/:id');
+    logger.log('  DELETE /api/students/:id');
+    logger.log('  GET  /api/students/group/:groupId');
+    logger.log('  GET  /api/average-age');
+    logger.log('  POST /api/students/save');
+    logger.log('  POST /api/students/load');
+    logger.log('  POST /api/backup/start');
+    logger.log('  POST /api/backup/stop');
+    logger.log('  GET  /api/backup/status\n');
+    logger.log('  GET  /status (admin/moderator only)\n');
+  });
+}
+
+module.exports = app;

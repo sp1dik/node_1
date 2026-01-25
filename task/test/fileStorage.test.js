@@ -1,5 +1,3 @@
-const test = require('node:test');
-const assert = require('node:assert');
 const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
@@ -17,9 +15,9 @@ test('FileStorage.saveToJSON and loadJSON roundtrip', async () => {
   await FileStorage.saveToJSON(students, filePath);
   const loaded = await FileStorage.loadJSON(filePath);
 
-  assert.strictEqual(loaded.length, students.length);
-  assert.strictEqual(loaded[0].name, 'Alice');
-  assert.strictEqual(loaded[1].age, 22);
+  expect(loaded.length).toBe(students.length);
+  expect(loaded[0].name).toBe('Alice');
+  expect(loaded[1].age).toBe(22);
 
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
